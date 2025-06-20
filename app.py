@@ -1,28 +1,41 @@
 from flask import Flask, request, jsonify
-from TikTokApi import TikTokApi
+import yt_dlp
 
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "✅ TikTokApi Flask API جاهز!"
+    return "✅ TikTok Video Downloader API جاهز!"
 
 @app.route('/api/download', methods=['POST'])
-def download_video():
+def download():
     video_url = request.form.get('url')
     if not video_url:
         return jsonify({'status': 'error', 'message': 'يرجى إدخال رابط الفيديو'}), 400
 
+    ydl_opts = {
+        'format': 'mp4',
+        'quiet': True,
+        'no_warnings': True,
+        'skip_download': True,  # لا تحمل الملف فقط استخرج روابط
+    }
+
     try:
-        with TikTokApi() as api:
-            video = api.video(url=video_url)
-            video_bytes = video.bytes()
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(video_url, download=False)
+            # أفضل رابط فيديو mp4 بدقة عالية
+            formats = info.get('formats', [])
+            best_format = next((f for f in formats if f.get('ext') == 'mp4' and f.get('vcodec') != 'none'), None)
 
-            filename = 'downloaded_video.mp4'
-            with open(filename, 'wb') as f:
-                f.write(video_bytes)
-
-        return jsonify({'status': 'success', 'message': f'تم حفظ الفيديو في {filename}'})
+            if best_format:
+                return jsonify({
+                    'status': 'success',
+                    'title': info.get('title'),
+                    'author': info.get('uploader'),
+                    'download_url': best_format.get('url')
+                })
+            else:
+                return jsonify({'status': 'error', 'message': 'تعذر إيجاد رابط تحميل صالح'})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
 
